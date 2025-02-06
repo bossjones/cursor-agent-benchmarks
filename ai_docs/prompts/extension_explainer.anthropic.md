@@ -11,6 +11,40 @@ Use the following guidelines throughout your response:
 - Consider VS Code-specific requirements and best practices
 </instructions>
 
+<evaluation_criteria>
+Evaluate the response based on:
+- Completeness of coverage for each section
+- Clarity and actionability of instructions
+- Proper use of VS Code-specific terminology and concepts
+- Quality and relevance of code examples
+- Adherence to best practices in extension development
+</evaluation_criteria>
+
+<fallback_instructions>
+If specific details about VS Code APIs or extension development practices are uncertain:
+- Clearly state the uncertainty
+- Provide general guidance based on software development best practices
+- Document any assumptions made
+- Suggest alternative approaches where applicable
+</fallback_instructions>
+
+<prioritization>
+Prioritize the following sections if time or space is limited:
+1. Extension Overview
+2. Implementation Guide
+3. Testing Guide
+4. VS Code-Specific Considerations
+5. Security Considerations
+</prioritization>
+
+<version_specificity>
+Target the documentation for:
+- VS Code version 1.85+
+- Latest stable release of VS Code Extension API
+- Node.js LTS version
+- TypeScript 5.0+
+</version_specificity>
+
 <sections>
 <section name="Extension Overview">
 <thinking>
@@ -163,6 +197,216 @@ To cover VS Code-specific considerations, I should:
 [Your detailed content here]
 </content>
 </section>
+
+<section name="Multishot Examples">
+<thinking>
+To provide comprehensive examples, I should include:
+1. Basic chat participant implementation
+2. Advanced streaming response handling
+3. Error handling and recovery
+4. Integration with VS Code commands
+5. Testing scenarios
+</thinking>
+<content>
+## Implementation Examples
+
+### Basic Chat Participant
+```typescript
+import * as vscode from 'vscode';
+import { ChatParticipant, ChatRequest, ResponseStream } from './types';
+
+export class BasicChatParticipant implements ChatParticipant {
+    readonly id = 'example.basicParticipant';
+    readonly displayName = 'Basic Participant';
+
+    async handleRequest(request: ChatRequest, context: vscode.ExtensionContext, response: ResponseStream): Promise<void> {
+        await response.append('Hello from basic participant!');
+        await response.complete();
+    }
+}
+```
+
+### Advanced Streaming Example
+```typescript
+export class AdvancedChatParticipant implements ChatParticipant {
+    async handleRequest(request: ChatRequest, context: vscode.ExtensionContext, response: ResponseStream): Promise<void> {
+        try {
+            // Start processing
+            await response.append('Processing request...\n');
+
+            // Simulate stream processing
+            for (const chunk of await this.processInChunks(request)) {
+                await response.append(chunk);
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            await response.complete();
+        } catch (error) {
+            await response.error('Error processing request: ' + error.message);
+        }
+    }
+}
+```
+</content>
+</section>
+
+<section name="Accessibility Considerations">
+<thinking>
+To address accessibility, I should:
+1. Explain how to make the extension keyboard-accessible
+2. Describe color contrast requirements
+3. Discuss screen reader compatibility
+4. Provide examples of accessible UI components
+</thinking>
+<content>
+## Accessibility Considerations
+
+### Keyboard Navigation
+- Ensure all features are accessible via keyboard
+- Implement proper focus management
+- Support standard VS Code keyboard shortcuts
+
+### Screen Reader Support
+- Use proper ARIA labels
+- Provide meaningful status messages
+- Ensure chat responses are screen reader friendly
+
+### Visual Considerations
+- Follow VS Code's theming guidelines
+- Maintain sufficient color contrast
+- Support high contrast themes
+</content>
+</section>
+
+<section name="Internationalization">
+<thinking>
+For internationalization, I need to cover:
+1. How to structure the extension for easy localization
+2. Best practices for string externalization
+3. Handling of right-to-left languages
+4. Date, time, and number formatting considerations
+</thinking>
+<content>
+## Internationalization
+
+### Localization Setup
+```typescript
+import * as vscode from 'vscode';
+import * as nls from 'vscode-nls';
+
+const localize = nls.loadMessageBundle();
+
+export class LocalizedChatParticipant {
+    readonly displayName = localize('participant.name', 'Localized Participant');
+
+    async handleRequest(request: ChatRequest): Promise<void> {
+        const response = localize('response.greeting', 'Hello from {0}!', this.displayName);
+        // Implementation
+    }
+}
+```
+
+### RTL Support
+- Use VS Code's built-in RTL support
+- Test with RTL languages
+- Handle bidirectional text properly
+</content>
+</section>
+
+<section name="Performance Considerations">
+<thinking>
+For performance, I should discuss:
+1. Efficient use of VS Code APIs
+2. Asynchronous programming best practices
+3. Minimizing extension activation time
+4. Optimizing resource usage
+</thinking>
+<content>
+## Performance Considerations
+
+### Extension Activation
+- Use lazy activation events
+- Minimize startup impact
+- Implement proper cleanup
+
+### Resource Management
+- Cache expensive computations
+- Implement proper disposal patterns
+- Use VS Code's built-in progress indicators
+
+### API Usage Optimization
+```typescript
+export class OptimizedChatParticipant {
+    private cache = new Map<string, Promise<string>>();
+
+    async handleRequest(request: ChatRequest): Promise<void> {
+        // Use cached results when possible
+        const cacheKey = this.getCacheKey(request);
+        if (this.cache.has(cacheKey)) {
+            return this.cache.get(cacheKey);
+        }
+
+        // Process new requests efficiently
+        const resultPromise = this.processRequest(request);
+        this.cache.set(cacheKey, resultPromise);
+        return resultPromise;
+    }
+}
+```
+</content>
+</section>
+
+<section name="Security Considerations">
+<thinking>
+For security, I need to cover:
+1. Handling sensitive data
+2. Secure communication practices
+3. Input validation and sanitization
+4. Potential security risks specific to VS Code extensions
+</thinking>
+<content>
+## Security Considerations
+
+### Data Security
+- Use VS Code's SecretStorage for sensitive data
+- Implement proper input validation
+- Handle secrets securely
+
+### Communication Security
+- Use secure protocols
+- Validate external data
+- Implement proper error handling
+
+### Example Security Implementation
+```typescript
+import * as vscode from 'vscode';
+
+export class SecureChatParticipant {
+    private readonly secrets: vscode.SecretStorage;
+
+    constructor(context: vscode.ExtensionContext) {
+        this.secrets = context.secrets;
+    }
+
+    async handleRequest(request: ChatRequest): Promise<void> {
+        // Validate input
+        if (!this.isValidRequest(request)) {
+            throw new Error('Invalid request');
+        }
+
+        // Handle secrets securely
+        const apiKey = await this.secrets.get('api-key');
+        if (!apiKey) {
+            throw new Error('API key not found');
+        }
+
+        // Process request securely
+        // Implementation
+    }
+}
+```
+</content>
+</section>
 </sections>
 
 <formatting>
@@ -170,7 +414,7 @@ Remember to use appropriate markdown formatting throughout your response:
 - Use ## for main section headers
 - Use ### for subsections
 - Use backticks (`) for inline code
-- Use triple backticks (```) for code blocks, specifying the language (e.g., ```
+- Use triple backticks (```) for code blocks, specifying the language (e.g., ```typescript)
 - Use bullet points (-) for lists
 - Use bold (**) for emphasis on important points
 </formatting>

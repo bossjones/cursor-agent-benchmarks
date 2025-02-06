@@ -1,7 +1,7 @@
 {
   "name": "cursor-agent-benchmarks",
   "displayName": "cursor-agent-benchmarks",
-  "description": "",
+  "description": "extension for cursor agent benchmarks",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.97.0"

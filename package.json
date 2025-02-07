@@ -7,8 +7,16 @@
     "vscode": "^1.97.0"
   },
   "categories": [
-    "Other"
+    "AI",
+    "Chat"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bossjones/cursor-agent-benchmarks"
+  },
+  "bugs": {
+    "url": "https://github.com/bossjones/cursor-agent-benchmarks/issues"
+  },
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
@@ -16,6 +24,21 @@
       {
         "command": "cursor-agent-benchmarks.helloWorld",
         "title": "Hello World"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "cursor-agent-benchmarks.agent",
+        "fullName": "Cursor Agent Benchmarks",
+        "name": "agent",
+        "description": "How can I help you benchmark and test?",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "benchmark",
+            "description": "Run benchmarking tests and analysis."
+          }
+        ]
       }
     ]
   },

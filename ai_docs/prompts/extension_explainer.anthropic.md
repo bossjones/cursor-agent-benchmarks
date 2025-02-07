@@ -152,6 +152,119 @@ suite('Extension Test Suite', () => {
 
 ### Error Handling and Edge Cases
 [Examples and explanations of error handling and edge case testing]
+
+### Testing Chat Participants
+```typescript
+import * as assert from 'assert';
+import * as vscode from 'vscode';
+import { CodeTutorParticipant } from '../src/participants';
+import { MockChatRequest, MockResponseStream, MockExtensionContext } from './mocks';
+
+suite('Code Tutor Participant Tests', () => {
+    let participant: CodeTutorParticipant;
+    let context: vscode.ExtensionContext;
+    let stream: MockResponseStream;
+    let request: MockChatRequest;
+
+    setup(() => {
+        context = new MockExtensionContext();
+        participant = new CodeTutorParticipant(context);
+        stream = new MockResponseStream();
+        request = new MockChatRequest('Tell me about variables in Python');
+    });
+
+    test('Should handle basic chat request', async () => {
+        await participant.handleRequest(request, context, stream, new vscode.CancellationTokenSource().token);
+
+        assert.ok(stream.responses.length > 0, 'Should have received responses');
+        assert.ok(stream.isComplete, 'Stream should be marked as complete');
+        assert.ok(!stream.hasError, 'Should not have any errors');
+    });
+
+    test('Should maintain conversation history', async () => {
+        // First message
+        await participant.handleRequest(
+            new MockChatRequest('What is a variable?'),
+            context,
+            stream,
+            new vscode.CancellationTokenSource().token
+        );
+
+        // Second message should include context from first
+        const stream2 = new MockResponseStream();
+        await participant.handleRequest(
+            new MockChatRequest('Show me an example'),
+            context,
+            stream2,
+            new vscode.CancellationTokenSource().token
+        );
+
+        assert.ok(stream2.responses.length > 0);
+        assert.ok(stream2.responses.some(r => r.includes('variable')),
+            'Second response should reference context from first message');
+    });
+
+    test('Should handle cancellation', async () => {
+        const tokenSource = new vscode.CancellationTokenSource();
+        const promise = participant.handleRequest(request, context, stream, tokenSource.token);
+
+        // Cancel the request
+        tokenSource.cancel();
+        await promise;
+
+        assert.ok(stream.responses.some(r => r.includes('cancelled')),
+            'Should indicate cancellation in response');
+    });
+
+    test('Should handle errors gracefully', async () => {
+        // Simulate error by using invalid model
+        request.model = null;
+        await participant.handleRequest(request, context, stream, new vscode.CancellationTokenSource().token);
+
+        assert.ok(stream.hasError, 'Should have error state');
+        assert.ok(stream.error.includes('Error processing request'),
+            'Should have descriptive error message');
+    });
+});
+
+// Mock implementations
+class MockChatRequest implements vscode.ChatRequest {
+    constructor(
+        public prompt: string,
+        public model: any = {
+            sendRequest: async () => ({
+                text: ['Mock response']
+            })
+        },
+        public command?: string
+    ) {}
+}
+
+class MockResponseStream implements vscode.ChatResponseStream {
+    public responses: string[] = [];
+    public isComplete = false;
+    public hasError = false;
+    public error = '';
+
+    async markdown(content: string): Promise<void> {
+        this.responses.push(content);
+    }
+
+    async complete(): Promise<void> {
+        this.isComplete = true;
+    }
+
+    async error(message: string): Promise<void> {
+        this.hasError = true;
+        this.error = message;
+    }
+}
+
+class MockExtensionContext implements vscode.ExtensionContext {
+    public history: vscode.ChatResponseTurn[] = [];
+    // ... other required implementation details
+}
+```
 </content>
 </section>
 
@@ -213,36 +326,188 @@ To provide comprehensive examples, I should include:
 ### Basic Chat Participant
 ```typescript
 import * as vscode from 'vscode';
-import { ChatParticipant, ChatRequest, ResponseStream } from './types';
 
-export class BasicChatParticipant implements ChatParticipant {
-    readonly id = 'example.basicParticipant';
-    readonly displayName = 'Basic Participant';
+/**
+ * Base prompt for the code tutor chat participant.
+ */
+const BASE_PROMPT = `You are a helpful code tutor. Your job is to teach the user with simple
+descriptions and sample code of the concept. Respond with a guided overview of the concept
+in a series of messages.`;
 
-    async handleRequest(request: ChatRequest, context: vscode.ExtensionContext, response: ResponseStream): Promise<void> {
-        await response.append('Hello from basic participant!');
-        await response.complete();
+/**
+ * Chat participant implementation for a code tutor.
+ */
+export class CodeTutorParticipant {
+    readonly id = 'example.codeTutor';
+    readonly displayName = 'Code Tutor';
+    private readonly _iconPath: vscode.Uri;
+
+    constructor(context: vscode.ExtensionContext) {
+        this._iconPath = vscode.Uri.joinPath(context.extensionUri, 'tutor.jpeg');
     }
+
+    /**
+     * Handles incoming chat requests.
+     *
+     * @param request - The chat request from VS Code
+     * @param context - Extension context
+     * @param stream - Response stream for sending messages back
+     * @param token - Cancellation token
+     */
+    async handleRequest(
+        request: vscode.ChatRequest,
+        context: vscode.ExtensionContext,
+        stream: vscode.ChatResponseStream,
+        token: vscode.CancellationToken
+    ): Promise<void> {
+        try {
+            // Initialize messages with base prompt
+            const messages = [
+                vscode.LanguageModelChatMessage.User(BASE_PROMPT),
+            ];
+
+            // Get previous conversation history
+            const previousMessages = context.history.filter(
+                (h) => h instanceof vscode.ChatResponseTurn
+            );
+
+            // Add previous messages to maintain context
+            previousMessages.forEach((m) => {
+                let fullMessage = '';
+                m.response.forEach((r) => {
+                    const mdPart = r as vscode.ChatResponseMarkdownPart;
+                    fullMessage += mdPart.value.value;
+                });
+                messages.push(vscode.LanguageModelChatMessage.Assistant(fullMessage));
+            });
+
+            // Add current user message
+            messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
+
+            // Send request to language model
+            const response = await request.model.sendRequest(messages, {}, token);
+
+            // Stream response back to user
+            for await (const fragment of response.text) {
+                await stream.markdown(fragment);
+            }
+
+            await stream.complete();
+        } catch (error) {
+            await stream.error(`Error processing request: ${error.message}`);
+        }
+    }
+}
+
+/**
+ * Activates the extension.
+ *
+ * @param context - Extension context
+ */
+export function activate(context: vscode.ExtensionContext) {
+    // Create and register the chat participant
+    const tutor = vscode.chat.createChatParticipant(
+        "chat-tutorial.code-tutor",
+        new CodeTutorParticipant(context).handleRequest
+    );
+
+    // Set the participant icon
+    tutor.iconPath = vscode.Uri.joinPath(context.extensionUri, 'tutor.jpeg');
 }
 ```
 
 ### Advanced Streaming Example
 ```typescript
-export class AdvancedChatParticipant implements ChatParticipant {
-    async handleRequest(request: ChatRequest, context: vscode.ExtensionContext, response: ResponseStream): Promise<void> {
-        try {
-            // Start processing
-            await response.append('Processing request...\n');
+/**
+ * Chat participant that supports different tutoring modes.
+ */
+export class AdvancedTutorParticipant {
+    /**
+     * Different prompts for different tutoring modes.
+     */
+    private readonly PROMPTS = {
+        base: 'You are a helpful code tutor...',
+        exercise: 'You are a helpful tutor providing exercises...',
+        debug: 'You are a helpful debugging assistant...'
+    };
 
-            // Simulate stream processing
-            for (const chunk of await this.processInChunks(request)) {
-                await response.append(chunk);
-                await new Promise(resolve => setTimeout(resolve, 100));
+    /**
+     * Handles chat requests with support for different modes.
+     */
+    async handleRequest(
+        request: vscode.ChatRequest,
+        context: vscode.ExtensionContext,
+        stream: vscode.ChatResponseStream,
+        token: vscode.CancellationToken
+    ): Promise<void> {
+        try {
+            // Select prompt based on command
+            const prompt = this.getPromptForCommand(request.command);
+
+            // Initialize conversation
+            const conversation = await this.buildConversation(prompt, context.history);
+
+            // Add current request
+            conversation.push(vscode.LanguageModelChatMessage.User(request.prompt));
+
+            // Process in chunks with progress indication
+            await stream.markdown('Processing request...\n');
+
+            // Send request to model
+            const response = await request.model.sendRequest(conversation, {
+                temperature: 0.7,
+                maxTokens: 1000
+            }, token);
+
+            // Stream response with markdown formatting
+            for await (const fragment of response.text) {
+                if (token.isCancellationRequested) {
+                    await stream.markdown('\n\n*Request cancelled*');
+                    return;
+                }
+                await stream.markdown(fragment);
             }
 
-            await response.complete();
+            await stream.complete();
         } catch (error) {
-            await response.error('Error processing request: ' + error.message);
+            await stream.error(`Error in advanced tutor: ${error.message}`);
+        }
+    }
+
+    /**
+     * Builds the conversation history with appropriate prompt.
+     */
+    private async buildConversation(
+        prompt: string,
+        history: readonly vscode.ChatResponseTurn[]
+    ): Promise<vscode.LanguageModelChatMessage[]> {
+        const messages = [vscode.LanguageModelChatMessage.User(prompt)];
+
+        // Add conversation history
+        history.filter(h => h instanceof vscode.ChatResponseTurn)
+              .forEach(m => {
+                  let fullMessage = '';
+                  m.response.forEach(r => {
+                      const mdPart = r as vscode.ChatResponseMarkdownPart;
+                      fullMessage += mdPart.value.value;
+                  });
+                  messages.push(vscode.LanguageModelChatMessage.Assistant(fullMessage));
+              });
+
+        return messages;
+    }
+
+    /**
+     * Gets the appropriate prompt based on the command.
+     */
+    private getPromptForCommand(command?: string): string {
+        switch (command) {
+            case 'exercise':
+                return this.PROMPTS.exercise;
+            case 'debug':
+                return this.PROMPTS.debug;
+            default:
+                return this.PROMPTS.base;
         }
     }
 }
